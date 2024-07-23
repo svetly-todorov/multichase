@@ -644,16 +644,29 @@ static void load_stream_sum(per_thread_t *t) {
 #define LOOP_OPS 1
   uint64_t load_loop = t->x.load_total_memory / LOOP_OPS;
   register uint64_t N = load_loop / sizeof(uint64_t);
-  uint64_t load_bites = N * sizeof(uint64_t) * LOOP_OPS;
+  register uint64_t load_bites = 0;
   register uint64_t i;
   register uint64_t *a = (uint64_t *)t->x.load_arena;
   register uint64_t s = 0;
+  register uint64_t cacheline = 64 / sizeof(uint64_t); // Cacheline size is 64B on Genoa
+  // register uint64_t c = 0; // iteration counter
+
+  // Bit twiddling for accounting
+  // bool flag = 0;
+  // uint64_t mask = ~0;
 
   LOAD_MEMORY_INIT_MIBPS
   do {
-    for (i = 0; i < N; ++i) {
+    if (loops == 0) 
+      load_bites = 0;
+    // Hop in strange pattern over cachelines
+    for (i = 0; i < N; i += cacheline + cacheline / ((i % cacheline) + 1)) {
       s += a[i];
+      load_bites += 64;
     }
+    // We are counting load_bites manually, so fix loops to zero
+    // (it will be incremented to 1 in the macro)
+    loops = 0;
     LOAD_MEMORY_SAMPLE_MIBPS
     use_result_dummy += s;
   } while (1);
